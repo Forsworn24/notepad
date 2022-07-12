@@ -142,6 +142,71 @@ class Post
   #
   # Подобным образом работает аналогичный метод одного из классов Ruby on Rails
 
+  def self.find_by_id(id)
+    # Библиотека "optparse" обработает ошибки, если искомый id был передан пользователем некорректно
+    # (OptionParser::MissingArgument,  OptionParser::InvalidOption)
+    # Добавим еще одну проверку, и если id не передали, мы ничего не ищем, а возвращаем nil
+    return if id.nil?
+
+    # Если id передали, едем дальше
+    db = SQLite3::Database.open(SQLITE_DB_FILE)
+    db.results_as_hash = true
+
+    begin
+      result = db.execute('SELECT * FROM posts WHERE  rowid = ?', id)
+    rescue SQLite3::SQLException => e
+      # Если возникла ошибка, пишем об этом пользователю и выводим текст ошибки
+      puts "Не удалось выполнить запрос в базе #{SQLITE_DB_FILE}"
+      abort e.message
+    end
+
+    db.close
+
+    # Если в результате запроса получили пустой массив, снова возвращаем nil
+    return nil if result.empty?
+
+    # Если результат не пуст, едем дальше
+    result = result[0]
+
+    # Создаем пост нужного типа, заполняем его данными и возвращаем
+    post = create(result['type'])
+    post.load_data(result)
+    post
+  end
+
+  def self.find_all(limit, type)
+    db = SQLite3::Database.open(SQLITE_DB_FILE)
+
+    db.results_as_hash = false
+
+    query = 'SELECT rowid, * FROM posts '
+    query += 'WHERE type = :type ' unless type.nil?
+    query += 'ORDER by rowid DESC '
+    query += 'LIMIT :limit ' unless limit.nil?
+
+    begin
+      statement = db.prepare query
+    rescue SQLite3::SQLException => e
+      puts "Не удалось выполнить запрос в базе #{SQLITE_DB_FILE}"
+      abort e.message
+    end
+
+    statement.bind_param('type', type) unless type.nil?
+    statement.bind_param('limit', limit) unless limit.nil?
+
+    begin
+      result = statement.execute!
+    rescue SQLite3::SQLException => e
+      puts "Не удалось выполнить запрос в базе #{SQLITE_DB_FILE}"
+      abort e.message
+    end
+
+    statement.close
+    db.close
+
+    result
+  end
+
   def read_from_console
     # Этот метод должен быть реализован у каждого ребенка
   end
